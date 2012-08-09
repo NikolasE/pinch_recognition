@@ -1,0 +1,14 @@
+<package>
+  <description brief="pinch_recognition">
+
+     pinch_recognition
+
+  </description>
+  <author>Nikolas Engelhard</author>
+  <license>BSD</license>
+  <review status="unreviewed" notes=""/>
+  <url>http://ros.org/wiki/pinch_recognition</url>
+
+</package>
+
+
