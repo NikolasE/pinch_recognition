@@ -9,6 +9,9 @@
   <review status="unreviewed" notes=""/>
   <url>http://ros.org/wiki/pinch_recognition</url>
 
+  <depend package="projector_calibration"/>
+
+
 </package>
 
 
