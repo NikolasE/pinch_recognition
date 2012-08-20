@@ -9,7 +9,13 @@
   <review status="unreviewed" notes=""/>
   <url>http://ros.org/wiki/pinch_recognition</url>
 
-  <depend package="projector_calibration"/>
+  <depend package="rgbd_utils"/>
+  <depend package="cv_bridge"/>
+  <depend package="opencv2"/>
+
+<export>
+  <cpp cflags="-I${prefix}/include" lflags="-L${prefix}/lib -lros"/>
+</export>
 
 
 </package>

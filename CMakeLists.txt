@@ -26,13 +26,10 @@ set(LIBRARY_OUTPUT_PATH ${PROJECT_SOURCE_DIR}/lib)
 #target_link_libraries(${PROJECT_NAME} another_library)
 #rosbuild_add_boost_directories()
 #rosbuild_link_boost(${PROJECT_NAME} thread)
-#
 #target_link_libraries(example ${PROJECT_NAME})
 
 
-include_directories(/usr/gast/engelhan/ros/master_thesis/projector_calibration/include)
-LINK_DIRECTORIES(/usr/gast/engelhan/ros/master_thesis/projector_calibration/lib)
+rosbuild_add_executable(pinch_detection src/main.cpp src/cloud_gmm.cpp)
+rosbuild_add_library(pinch src/main.cpp src/cloud_gmm.cpp)
 
-rosbuild_add_executable(pinch_detection src/main.cpp)
-
-target_link_libraries(pinch_detection projector)
+target_link_libraries(pinch_detection rgbd_utils)
