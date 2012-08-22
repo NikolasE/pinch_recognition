@@ -35,7 +35,11 @@ struct Background_substraction {
 
  bool computeBackground(float max_std_dev = 0.005);
 
- Cloud removeBackground(const Cloud& current, float max_dist, std::vector<cv::Point2i>* valids);
+ Cloud removeBackground(const Cloud& current,float min_dist, float max_dist, std::vector<cv::Point2i>* valids);
+ Cloud removeBackground(const Cloud& current,float min_dist, float max_dist, cv::Mat& foreground);
+
+
+ Cloud showBackground(const Cloud& cloud);
 
  void reset(){
   dists.clear();
@@ -50,7 +54,7 @@ struct Background_substraction {
  }
 
  Cloud applyMask(Cloud& current);
- cv::Mat applyMask(cv::Mat& img);
+ void applyMask(cv::Mat& img);
 
 
 
@@ -62,6 +66,8 @@ private:
   means.setTo(-1);
   std_dev.setTo(-100);
  }
+
+ void showMask(const std::vector<cv::Point2i>& mask, cv::Mat& img);
 
 
  std::vector<cv::Mat> dists;

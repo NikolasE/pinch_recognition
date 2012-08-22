@@ -10,6 +10,16 @@
 
 using namespace std;
 
+void Background_substraction::showMask(const std::vector<cv::Point2i>& mask, cv::Mat& img){
+ img.setTo(0);
+
+ for (uint i=0; i<mask.size(); ++i){
+  img.at<uchar>(mask[i].y,mask[i].x) = 255;
+ }
+
+}
+
+
 uint Background_substraction::addTrainingFrame(const Cloud& c){
 
  if (dists.size() == 0){
@@ -30,21 +40,21 @@ uint Background_substraction::addTrainingFrame(const Cloud& c){
   }
 
  dists.push_back(new_dist);
+
  return dists.size();
 
 }
 
 
-cv::Mat Background_substraction::applyMask(cv::Mat& img){
+void Background_substraction::applyMask(cv::Mat& img){
+
 
  if (mask.cols != img.cols){
   ROS_WARN("no background computed!");
-  return cv::Mat();
  }
-
- cv::Mat result;
- img.copyTo(result, mask);
- return result;
+ cv::Mat result; result.setTo(0);
+ mask.copyTo(result, img);
+ mask = result;
 
 }
 
@@ -62,7 +72,7 @@ Cloud Background_substraction::applyMask(Cloud& current){
 
  for (uint x=0; x<current.width; ++x)
   for (uint y=0; y<current.height; ++y){
-   if (mask.at<uchar>(y,x) == 0)
+   if (mask.at<uchar>(y,x) == 255)
     result.push_back(current.at(x,y));
   }
 
@@ -71,12 +81,52 @@ Cloud Background_substraction::applyMask(Cloud& current){
 }
 
 
-Cloud Background_substraction::removeBackground(const Cloud& current, float max_dist, std::vector<cv::Point2i>* valids){
+Cloud Background_substraction::showBackground(const Cloud& cloud){
+
+ Cloud result; result.reserve(cloud.size());
+ for (uint x=0; x<cloud.width; ++x)
+  for (uint y=0; y<cloud.height; ++y){
+   float m = means.at<float>(y,x);
+   if (m > 0){
+    pcl_Point c = cloud.at(x,y);
+    if (c.x != c.x) continue;
+    setLength(c,m);
+    result.push_back(c);
+   }
+  }
+
+ return result;
+
+}
+
+Cloud Background_substraction::removeBackground(const Cloud& current, float min_dist, float max_dist, cv::Mat& foreground){
+ std::vector<cv::Point2i> valids;
+
+ Cloud result = removeBackground(current,min_dist,  max_dist, &valids);
+
+ foreground = cv::Mat(current.height, current.width, CV_8UC1);
+ showMask(valids,foreground);
+
+ cv::erode(foreground, foreground, cv::Mat());
+ cv::dilate(foreground, foreground, cv::Mat());
+
+ return result;
+}
+
+
+
+Cloud Background_substraction::removeBackground(const Cloud& current, float min_dist, float max_dist, std::vector<cv::Point2i>* valids){
 
  Cloud result;
+
+
+
 // assert(cloud.size() == reference.size());
 
 // for (uint i=0; i<cloud.size(); ++i){
+
+
+ uint invalid = 0;
 
  for (uint x=0; x<current.width; ++x)
   for (uint y=0; y<current.height; ++y){
@@ -84,21 +134,23 @@ Cloud Background_substraction::removeBackground(const Cloud& current, float max_
   pcl_Point c = current.at(x,y);
 
 
-  if (c.x != c.x) continue;
+  if (c.x != c.x) { invalid++; continue;}
 
   if (mask.at<uchar>(y,x) == 0) continue;
 
-  float n = norm(c);
+  float d = norm(c);
   float mean = means.at<float>(y,x);
 
   // ROS_INFO("Norm: %f, mean: %f", n, mean);
 
-  if ( n < mean - max_dist){
+  if ( mean - min_dist > d && d > mean - max_dist){
    result.push_back(c);
    if (valids) valids->push_back(cv::Point2i(x,y));
   }
 
  }
+
+// ROS_INFO("BG: %i invalid", invalid);
 
  return result;
 
@@ -109,16 +161,6 @@ bool Background_substraction::computeBackground(float max_std_dev){
 
  reset_helper_images();
 
- // if (training_frames_cnt == 0){
- //  ROS_WARN("Background_substraction: No training frames!");
- //  return false;
- // }
- //
- // if (training_frames_cnt == 1){
- //  ROS_WARN("Background_substraction: Only one training frame!");
- //  mean = dist_sum;
- //  return false;
- // }
 
  if (dists.size() == 0){
   ROS_FATAL("Background_substraction::computeBackground: no Training data!");
@@ -151,7 +193,6 @@ bool Background_substraction::computeBackground(float max_std_dev){
     continue;
    }
 
-   assert(valid_dists >= 2);
 
    // compute mean
    float mu = 0;
@@ -207,7 +248,9 @@ bool Background_substraction::computeBackground(float max_std_dev){
 // cv::dilate(mask, mask, cv::Mat());
  cv::erode(mask, mask, cv::Mat());
 
-//
+
+
+
 // //vars -= min_val;
 // // vars /= 0.02*0.02;
 //
@@ -224,11 +267,6 @@ bool Background_substraction::computeBackground(float max_std_dev){
 //
 //
 // cv::minMaxLoc(std_dev, &min_val, &max_val);
-//
-//
-//
-//
-//
 //
 //
 // cv::Mat m1;
@@ -251,10 +289,10 @@ bool Background_substraction::computeBackground(float max_std_dev){
 // cv::imshow("nans", nans);
 
 
- cv::namedWindow("mask");
- cv::imshow("mask", mask);
-
- cv::waitKey(10);
+// cv::namedWindow("mask");
+// cv::imshow("mask", mask);
+//
+// cv::waitKey(10);
 
 
 
