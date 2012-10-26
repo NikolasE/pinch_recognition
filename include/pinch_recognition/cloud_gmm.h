@@ -20,6 +20,78 @@
 #include <opencv/highgui.h>
 
 
+
+/**
+ * Computation of mean values at each position in constant time.
+ */
+class PixelGaussian {
+
+ /// mean value (CV_32FC1)
+ cv::Mat mean;
+
+ /// variance (CV_32FC1)
+ cv::Mat var;
+
+ /// number of training points (CV_32FC1)
+ cv::Mat counter;
+
+ /// sum of squared training values (CV_32FC1)
+ cv::Mat sq;
+
+ int training_frame_cnt;
+ bool var_computed;
+ void computeVariance();
+
+public:
+
+
+ /**
+  * @param max_var maximum variance
+  * @return   8UC1-image where white corresponds to pixels that passed the variance-test
+  */
+ /// computation of all pixels with training points and a variance smaller than max_var
+ cv::Mat varianceThreshold(float max_var);
+
+ /**
+  *
+  * @param max_dist  if distance to model is larger than max_dist, a point is considered foreground
+  * @param current
+  * @return 8UC1-image FG with FG(x,y) == 255 iff abs(current(x,y) - mean(x,y)) >= max_dist
+  */
+ /// get mask of pixels that are closer than max_dist to the cam as their corresponding pixel in the model
+ cv::Mat getForeground(float max_dist, const cv::Mat& current);
+
+
+ /**
+  *
+  * @param max_p
+  * @return
+  * @todo: implement me
+  */
+ /// if p(c|mu,var) > max_p, point is considered foreground
+// cv::Mat getForegroundProb(float max_p);
+
+
+
+ void reset(){
+  training_frame_cnt = 0;
+  var_computed = false;
+ }
+
+ PixelGaussian(){
+  reset();
+ }
+
+
+ int updateModel(const cv::Mat& current);
+
+ cv::Mat getCounter(){return counter;}
+ cv::Mat getMean(){return mean;}
+ cv::Mat getVariance();
+
+};
+
+
 struct Background_substraction {
 
  Background_substraction(){
@@ -56,11 +128,11 @@ struct Background_substraction {
  Cloud applyMask(Cloud& current);
  void applyMask(cv::Mat& img);
 
-
+ cv::Mat mask;
 
 private:
 
- cv::Mat mask;
+
 
  void reset_helper_images(){
   means.setTo(-1);

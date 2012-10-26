@@ -11,6 +11,28 @@
 
 #include "pinch_recognition/cloud_gmm.h"
 
+
+
+
+void detectGrasp(cv::Mat& foreground, std::vector<cv::Point2f>& res, cv::Mat* col = NULL, bool verbose = false);
+
+
+
+
+
+
+class Grasp_detector : public PixelGaussian {
+
+
+public:
+ void detectGrasps(std::vector<cv::Point2f>& res, float max_dist, cv::Mat* current, cv::Mat* col = NULL, bool verbose = false);
+
+// Grasp_detector(){}
+
+};
+
+
+
 class Pinch_detector : public Background_substraction {
 
 

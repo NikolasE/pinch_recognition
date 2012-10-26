@@ -10,6 +10,176 @@
 
 using namespace std;
 
+
+cv::Mat PixelGaussian::getForeground(float max_dist, const cv::Mat& current){
+ cv::Mat fg(mean.size(), CV_8UC1);
+ fg.setTo(0);
+
+ float m,c,v;
+
+ assert(mean.size() == current.size());
+
+ if (!var_computed)
+  computeVariance();
+
+ uchar fg_value = 255;
+
+ for (int x=0; x<mean.cols; ++x)
+  for (int y=0; y<mean.rows; ++y){
+
+   m = mean.at<float>(y,x);
+   c = current.at<float>(y,x);
+   v = var.at<float>(y,x);
+
+   // no measurement at this position
+   if (c != c) continue;
+
+   // if there was no valid measurement in this pixel, every valid measurement is foreground
+//   if (v<0){
+//    if (c==c)
+//     fg.at<uchar>(y,x) = fg_value;
+//    else
+//     continue;
+//   }
+
+
+   if (abs(m-c) >= max_dist)
+    fg.at<uchar>(y,x) = fg_value;
+  }
+
+ return fg;
+
+}
+
+
+
+cv::Mat PixelGaussian::varianceThreshold(float max_var){
+
+ cv::Mat fg(var.size(), CV_8UC1);
+ fg.setTo(0);
+
+
+ float v;
+
+ for (int x=0; x<var.cols; ++x)
+  for (int y=0; y<var.rows; ++y){
+
+   v = var.at<float>(y,x);
+
+   if (v >= 0 && v <= max_var)
+    fg.at<uchar>(y,x) = 255;
+  }
+
+ return fg;
+
+}
+
+
+
+int PixelGaussian::updateModel(const cv::Mat& current){
+
+ assert(current.type() == CV_32FC1);
+
+ if (training_frame_cnt == 0){
+
+  mean = cv::Mat(current.size(), CV_32FC1);
+  mean.setTo(0);
+
+  var = cv::Mat(current.size(), CV_32FC1);
+  var.setTo(0);
+
+  sq = cv::Mat(current.size(), CV_32FC1);
+  sq.setTo(0);
+
+  counter = cv::Mat(current.size(), CV_32FC1);
+  counter.setTo(0);
+ }else{
+//  ROS_INFO("current: %i %i, mean: %i %i", current.cols, current.rows, mean.cols, mean.rows);
+  assert(current.size() == mean.size());
+ }
+
+
+
+ float mu_old, mu_new, sq_old,sq_new, val;
+ float n_old, n_new;
+
+ for (int x=0; x<current.cols; ++x)
+  for (int y=0; y<current.rows; ++y){
+
+   val = current.at<float>(y,x);
+
+   if (val != val){
+    continue;
+   }
+
+   mu_old = mean.at<float>(y,x);
+   n_old = counter.at<float>(y,x);
+   sq_old = sq.at<float>(y,x);
+
+   mu_new = (n_old*mu_old+val)/(n_old+1);
+   sq_new = sq_old + val*val;
+
+   mean.at<float>(y,x) = mu_new;
+   sq.at<float>(y,x)   = sq_new;
+
+   counter.at<float>(y,x) = n_old + 1;
+  }
+
+
+ // cv::GaussianBlur(mean, mean, cv::Size(3,3),2,2);
+
+ var_computed = false;
+
+ return training_frame_cnt++;
+}
+
+
+cv::Mat PixelGaussian::getVariance(){
+
+ if (!var_computed)
+  computeVariance();
+
+ return var;
+}
+
+
+
+void PixelGaussian::computeVariance(){
+
+
+ float n, s, mu;
+
+ for (int x=0; x<mean.cols; ++x)
+  for (int y=0; y<mean.rows; ++y){
+
+   n = counter.at<float>(y,x);
+
+   if (n < 1){
+    var.at<float>(y,x) = -1;
+    continue;
+   }
+
+   if (n < 2){
+    var.at<float>(y,x) = 0;
+    continue;
+   }
+
+   s = sq.at<float>(y,x);
+   mu = mean.at<float>(y,x);
+
+   float new_var = s/n-mu*mu;
+   var.at<float>(y,x) = new_var;
+//   if (new_var < 0)
+//    ROS_INFO("s: %f, n: %f, mu: %f, new_var: %f", s,n,mu, new_var);
+//   assert(new_var >= 0);
+  }
+
+ var_computed = true;
+}
+
+
+
+
 void Background_substraction::showMask(const std::vector<cv::Point2i>& mask, cv::Mat& img){
  img.setTo(0);
 
@@ -83,7 +253,8 @@ Cloud Background_substraction::applyMask(Cloud& current){
 
 Cloud Background_substraction::showBackground(const Cloud& cloud){
 
- Cloud result; result.reserve(cloud.size());
+ Cloud result; result = cloud;
+
  for (uint x=0; x<cloud.width; ++x)
   for (uint y=0; y<cloud.height; ++y){
    float m = means.at<float>(y,x);
@@ -91,7 +262,7 @@ Cloud Background_substraction::showBackground(const Cloud& cloud){
     pcl_Point c = cloud.at(x,y);
     if (c.x != c.x) continue;
     setLength(c,m);
-    result.push_back(c);
+    result.at(x,y) = c;
    }
   }
 
@@ -126,6 +297,13 @@ Cloud Background_substraction::removeBackground(const Cloud& current, float min_
 // for (uint i=0; i<cloud.size(); ++i){
 
 
+ ROS_INFO("min: %f, max: %f", min_dist,max_dist);
+
+ if (min_dist == max_dist){
+  ROS_WARN("removeBackground called with min = %f and max = %f", min_dist, max_dist);
+  return result;
+ }
+
  uint invalid = 0;
 
  for (uint x=0; x<current.width; ++x)
@@ -141,7 +319,7 @@ Cloud Background_substraction::removeBackground(const Cloud& current, float min_
   float d = norm(c);
   float mean = means.at<float>(y,x);
 
-  // ROS_INFO("Norm: %f, mean: %f", n, mean);
+//   ROS_INFO("Norm: %f, mean: %f", d, mean);
 
   if ( mean - min_dist > d && d > mean - max_dist){
    result.push_back(c);
@@ -217,7 +395,6 @@ bool Background_substraction::computeBackground(float max_std_dev){
    std_dev.at<float>(y,x) = sqrt(var);
 
   }
-
 // ROS_INFO("Background computed");
 
 
@@ -249,7 +426,7 @@ bool Background_substraction::computeBackground(float max_std_dev){
  cv::erode(mask, mask, cv::Mat());
 
 
-
+cv::imwrite("mask.jpg", mask);
 
 // //vars -= min_val;
 // // vars /= 0.02*0.02;

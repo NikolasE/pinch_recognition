@@ -29,7 +29,7 @@ set(LIBRARY_OUTPUT_PATH ${PROJECT_SOURCE_DIR}/lib)
 #target_link_libraries(example ${PROJECT_NAME})
 
 
-rosbuild_add_executable(pinch_detection src/main.cpp src/cloud_gmm.cpp src/pinch_detection.cpp)
-rosbuild_add_library(pinch src/main.cpp src/cloud_gmm.cpp src/pinch_detection.cpp)
+rosbuild_add_executable(pinch_detection src/main.cpp src/cloud_gmm.cpp src/pinch_detection.cpp src/surface_modeler.cpp)
+rosbuild_add_library(pinch src/main.cpp src/cloud_gmm.cpp src/pinch_detection.cpp src/surface_modeler.cpp)
 
 target_link_libraries(pinch_detection rgbd_utils)
