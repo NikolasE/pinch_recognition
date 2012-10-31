@@ -101,7 +101,7 @@ int PixelGaussian::updateModel(const cv::Mat& current){
 
 
  float mu_old, mu_new, sq_old,sq_new, val;
- float n_old, n_new;
+ float n_old;
 
  for (int x=0; x<current.cols; ++x)
   for (int y=0; y<current.rows; ++y){
