@@ -10,13 +10,18 @@
 using namespace std;
 
 
-int Graps_Debouncer::next_id = 0;
+/*
+template <class T>
+int Object_tracker<T>::next_id = 0;
+ */
 
-void Graps_Debouncer::updateGrasps(const std::vector<cv::Point2f>& detections){
+/*
+template <class T>
+void Object_tracker<T>::update_tracks(const std::vector<cv::Point2f>& detections){
 
  // no special handling for very close detections (one grasp could get several detections)
 
- std::vector<Grasp> new_grasps;
+ std::vector<T> new_tracks;
 
  for (uint i=0; i < detections.size(); ++i){
 
@@ -25,7 +30,7 @@ void Graps_Debouncer::updateGrasps(const std::vector<cv::Point2f>& detections){
   float min_dist = max_dist_px;
   int best_match = -1;
   //  for (uint j=0; j< grasps.size(); ++j){
-  for (Grasp_it it = grasps.begin(); it!=grasps.end(); ++it){
+  for (obj_it it = tracks.begin(); it!=tracks.end(); ++it){
 
    float dist = it->second.dist_to(detection);
 
@@ -38,14 +43,14 @@ void Graps_Debouncer::updateGrasps(const std::vector<cv::Point2f>& detections){
   }
 
   if (best_match > -1){
-   Grasp_it best = grasps.find(best_match);
+   obj_it best = tracks.find(best_match);
    best->second.update(detection);
 //   grasps[best_match].update(detection);
   }else{
    // start new grasp
-   Grasp new_grasp(detection);
-   new_grasp.id = next_id++;
-   new_grasps.push_back(new_grasp);
+   T new_track(detection);
+   new_track.id = next_id++;
+   new_tracks.push_back(new_track);
   }
 
  }
@@ -53,37 +58,33 @@ void Graps_Debouncer::updateGrasps(const std::vector<cv::Point2f>& detections){
 
  // publish confirmed grasps:
 
- Grasp_it it = grasps.begin();
+ obj_it it = tracks.begin();
 
- while( it != grasps.end()){
+ while( it != tracks.end()){
 
-  Grasp *g = &it->second;
+  T *g = &it->second;
 
 
   ROS_INFO("grasp %i: state %i", g->id,g->state);
 
 
-  if (g->state == Grasp_Confirmed){
-//   ROS_INFO("grasp %i: now active", g->id);
-
-   g->state = Grasp_Active;
+  if (g->state == Track_Confirmed){
+//   ROS_INFO("track %i: now active", g->id);
+   g->state = Track_Active;
   }
 
   /// grasp was confirmed and is now an official grasp
-  if (g->detections.size() == 3 && g->state == Grasp_Initialized){
-   //   ROS_INFO("New grasp at %f %f", g->last_detection.x ,g->last_detection.y);
-   g->state = Grasp_Confirmed;
-//   ROS_INFO("grasp %i: now confirmed", g->id);
-
+  if (g->detections.size() == 3 && g->state == Track_Initialized){
+   //   ROS_INFO("New track at %f %f", g->last_detection.x ,g->last_detection.y);
+   g->state = Track_Confirmed;
+//   ROS_INFO("track %i: now confirmed", g->id);
   }
-
-
 
   /// remove grasp if it was finished in the last update
   // http://stackoverflow.com/questions/263945/what-happens-if-you-call-erase-on-a-map-element-while-iterating-from-begin-to
-  if (g->state == Grasp_Finished){
+  if (g->state == Track_Finished){
    ROS_INFO("removing grasp with id %i", g->id);
-   grasps.erase(it++);
+   tracks.erase(it++);
 //   ROS_INFO("Finished grasp: pos: %i, id: %i", i,g->id);
   }else{
    ++it;
@@ -94,25 +95,103 @@ void Graps_Debouncer::updateGrasps(const std::vector<cv::Point2f>& detections){
  // published ended grasps
  ros::Time now = ros::Time::now();
  //for (uint i=0; i<grasps.size(); ++i){
- for (Grasp_it it = grasps.begin(); it!=grasps.end(); ++it){
+ for (obj_it it = tracks.begin(); it!=tracks.end(); ++it){
 
-  Grasp *g = &it->second;
+  T *g = &it->second;
 
   ros::Duration time_since_last_update = (now-g->last_seen);
 
   if (time_since_last_update > ros::Duration(0.2)){
-   //   ROS_INFO("Closed grasp at %f %f", grasps[i].last_detection.x ,grasps[i].last_detection.y);
-   g->state = Grasp_Finished;
+   g->state = Track_Finished;
   }
 
  }
 
  // append new grasps:
- for (uint i=0; i<new_grasps.size(); ++i){
-  assert(new_grasps[i].state == Grasp_Initialized);
-  grasps[new_grasps[i].id] = new_grasps[i];
+ for (uint i=0; i<new_tracks.size(); ++i){
+  assert(new_tracks[i].state == Track_Initialized);
+  tracks[new_tracks[i].id] = new_tracks[i];
  }
 
+
+}
+ */
+
+
+void detectPlayingPieces(cv::Mat& foreground, const cv::Mat& areaMask, const Cloud& scene, std::vector<Playing_Piece>& objects, bool& hand_visible, bool& border_crossing,  cv::Mat* col){
+
+ assert(foreground.cols == int(scene.width));
+ objects.clear();
+
+ vector<vector<cv::Point> > contours;
+ vector<cv::Vec4i> hierarchy;
+
+ ros::Time start = ros::Time::now();
+ cv::findContours(foreground, contours, hierarchy, CV_RETR_TREE, CV_CHAIN_APPROX_SIMPLE, cv::Point(0, 0) );
+ ROS_INFO("findContours: %f ms", (ros::Time::now()-start).toSec()*1000.0);
+
+ // compute area for each contour:
+
+ cv::Mat edge;
+ // get boundary of modeled are within the image:
+ cv::Canny(areaMask, edge, 1,10);
+
+// cv::imwrite("canny.png", edge);
+
+ cv::dilate(edge, edge, cv::Mat(), cv::Point(-1,-1),1);
+
+// cv::imwrite("dilate.png", edge);
+
+
+ hand_visible = false;
+
+ float areas[contours.size()];
+ for( uint i = 0; i< contours.size(); i++ ){
+  areas[i] = cv::contourArea(contours[i]);
+
+  if (areas[i] > C_MIN_HAND_AREA)
+   hand_visible = true;
+
+ }
+
+ cv::Scalar color =  cv::Scalar( 255,0,0 );
+
+
+ cv::Mat contour_image(foreground.size(), CV_8UC1);
+ contour_image.setTo(0);
+
+ for( uint i = 0; i< contours.size(); i++ ){
+
+  if (areas[i] < C_MIN_OBJECT_AREA)
+   continue;
+
+  // ROS_INFO("contour %i has size %f",i,areas[i]);
+
+
+  cv::Moments mom = cv::moments(contours[i]);
+
+  cv::Point2f center = cv::Point2f(mom.m10/mom.m00, mom.m01/mom.m00);
+
+  Playing_Piece pp(center);
+  pp.area = areas[i];
+  objects.push_back(pp);
+
+  cv::drawContours( contour_image, contours, i, color, -1, 8, hierarchy, 0, cv::Point() );
+
+  if (col)
+   cv::drawContours( *col, contours, i, color, 2, 8, hierarchy, 0, cv::Point() );
+ }
+
+// cv::imwrite("contours.png", contour_image);
+
+ cv::Mat intersection; intersection.setTo(0);
+ contour_image.copyTo(intersection, edge);
+
+ border_crossing = cv::countNonZero(intersection)>0;
+
+ if (border_crossing){
+  ROS_INFO("FOUND INTERSECTION WITH BORDER");
+ }
 
 }
 
