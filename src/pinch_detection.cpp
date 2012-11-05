@@ -196,7 +196,7 @@ void detectPlayingPieces(cv::Mat& foreground, const cv::Mat& areaMask, const Clo
 }
 
 
-void detectGrasp(cv::Mat& foreground, std::vector<cv::Point2f>& grasps, cv::Mat* col, bool verbose){
+void detectGrasp(cv::Mat& foreground, std::vector<Grasp>& grasps, cv::Mat* col, bool verbose){
 
  if (foreground.cols == 0){
   ROS_ERROR("no foreground detected!");
@@ -257,7 +257,8 @@ void detectGrasp(cv::Mat& foreground, std::vector<cv::Point2f>& grasps, cv::Mat*
     cv::Moments mom = cv::moments(contours[i]);
 
     cv::Point2f center = cv::Point2f(mom.m10/mom.m00, mom.m01/mom.m00);
-    grasps.push_back(center);
+    Grasp grasp(center);
+    grasps.push_back(grasp);
 
     if (col)
      cv::circle(*col, center, 30, CV_RGB(255,0,0),-1);

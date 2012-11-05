@@ -15,7 +15,7 @@
 #define C_MIN_HAND_AREA 1000
 #define C_MIN_OBJECT_AREA 20
 
-// Grasp_Confirmed and Grasp_Finished are intermedite states
+// Grasp_Confirmed and Grasp_Finished are intermediate states
 enum Tracking_State {Track_Initialized  = 0, Track_Confirmed, Track_Active, Track_Finished};
 
 
@@ -29,13 +29,14 @@ struct Tracked_Object {
 
  int id;
  Tracking_State state;
+ uint not_seen_cnt;
 
-
- Tracked_Object(){}
+ Tracked_Object(){not_seen_cnt = 0;}
 
  Tracked_Object(const cv::Point2f& detection){
   update(detection);
   state = Track_Initialized;
+  not_seen_cnt = 0;
  }
 
  float dist_to(const cv::Point2f& detection){
@@ -45,7 +46,6 @@ struct Tracked_Object {
  void update(const cv::Point2f& detection){
   detections.push_back(detection);
   last_detection = detection;
-  last_seen = ros::Time::now();
  }
 
 };
@@ -70,7 +70,7 @@ struct Grasp : public Tracked_Object {
 
 
 
-void detectGrasp(cv::Mat& foreground, std::vector<cv::Point2f>& res, cv::Mat* col = NULL, bool verbose = false);
+void detectGrasp(cv::Mat& foreground, std::vector<Grasp>& res, cv::Mat* col = NULL, bool verbose = false);
 void detectPlayingPieces(cv::Mat& foreground,const cv::Mat& areaMask, const Cloud& scene, std::vector<Playing_Piece>& objects, bool& hand_visible, bool &border_crossing,  cv::Mat* col);
 
 
@@ -87,80 +87,92 @@ class Object_tracker {
 
 private:
  float max_dist_px;
- ros::Duration time_threshold;
- uint detections_before_confirmation;
+
+ // tracks are published after so many observations and closed after so many frames without detection
+ uint detection_hysteresis;
 
  static int next_id;
 
 public:
 
-// void update_tracks_best_paris(const std::vector<T>& detections, float max_dist = -1 ){
-//
-// }
-
+ /**
+ *
+ * @param detections  object detections in the current frame
+ * @param max_dist    maximal distance (in px) of a matched pair
+ */
+ /// match tracks with detections by finding iteratively the closest pair
  void update_tracks(const std::vector<T>& detections, float max_dist = -1 ){
-  // no special handling for very close detections (one grasp could get several detections)
 
+  if (max_dist <= 0)  max_dist = max_dist_px;
 
-  if (max_dist <= 0)
-   max_dist = max_dist_px;
-
-  ROS_INFO("Updating with max_dist = %f", max_dist);
-
-
-  std::vector<T> new_tracks;
-
-
+  // remember which detection was used to update a track
   bool detection_used[detections.size()];
   for (uint i=0; i < detections.size(); ++i){detection_used[i] = false;}
 
-
-  /// every detection can be used to update several tracks, no hungarian method or similar is used!
-
-  // for every track find closest detection
+  // remember which track was updated in this frame
+  std::map<int,bool> track_updated;
   for (obj_it it = tracks.begin(); it!=tracks.end(); ++it){
-   float min_dist = max_dist;
-   int best_match = -1;
-
-   for (uint i=0; i < detections.size(); ++i){
-
-    cv::Point2f detection = detections[i].last_detection;
-
-    float dist = it->second.dist_to(detection);
-
-    ROS_INFO("detection %i vs grasp %i: %f px", i,it->first,dist);
-
-    if (dist < min_dist){
-     min_dist = dist;
-     best_match = i;
-    }
-   }
-
-   // track has found a close detection
-   if (best_match > -1){
-    it->second.update(detections[best_match].last_detection);
-    detection_used[best_match] = true;
-   }
-
-   //    //    obj_it best = tracks.find(best_match);
-   //    //    best->second.update(detection);
-   //    //    ROS_INFO("track %i is updated with detection %i", best->first, )
-   //   }else{
-   //    // start new grasp
-   //    T new_track(detection);
-   //    new_track.id = next_id++;
-   //    new_tracks.push_back(new_track);
-   //   }
-
+   track_updated[it->first] = false;
   }
 
 
-  // publish confirmed grasps:
+  while (true){
 
+   int best_track_id = -1;      // id of updated track
+   int best_detection_pos = -1; // id of detection used to update
+   float min_dist = max_dist;   // distance of best pair
+
+   for (obj_it it = tracks.begin(); it!=tracks.end(); ++it){
+
+    if (track_updated[it->first]){ continue; }
+
+    for (uint i=0; i < detections.size(); ++i){
+
+     if (detection_used[i] == true){ continue; }
+
+     // detections[i] is an observation and has only one last_detection
+     cv::Point2f detection = detections[i].last_detection;
+
+     float dist = it->second.dist_to(detection);
+
+     // ROS_INFO("detection %i vs grasp %i: %f px", i,it->first,dist);
+
+     if (dist < min_dist){
+      min_dist = dist;
+      best_track_id = it->first;
+      best_detection_pos = i;
+     }
+
+    } // iteration over detections
+
+   } // iteration over tracks
+
+
+   // check if a pair with distance < max_dist was found
+   if (best_detection_pos >= 0){
+
+    // update best pair
+    tracks[best_track_id].update(detections[best_detection_pos].last_detection);
+
+    detection_used[best_detection_pos] = true;
+    track_updated[best_track_id] = true;
+   }else{
+    // no match was found. Unmatched detections will spawn new tracks
+    break;
+   }
+
+  } // while true
+
+
+
+  // mark tracks that have not been updated
+  for (obj_it it = tracks.begin(); it!=tracks.end(); ++it){
+   if (track_updated[it->first] == false)
+    it->second.not_seen_cnt++;
+  }
+
+  // update state of tracks
   obj_it it = tracks.begin();
-
-  ros::Time now = ros::Time::now();
-
   while( it != tracks.end()){
 
    T *g = &it->second;
@@ -172,21 +184,16 @@ public:
    }
 
    /// track was seen in several frames and is now an official track
-   if (g->detections.size() == detections_before_confirmation && g->state == Track_Initialized){
+   if (g->detections.size() == detection_hysteresis && g->state == Track_Initialized){
     //   ROS_INFO("New track at %f %f", g->last_detection.x ,g->last_detection.y);
     g->state = Track_Confirmed;
     //   ROS_INFO("track %i: now confirmed", g->id);
    }
 
 
-   /**
-   * Object was not seen in the last frames and was not yet confirmed.
-   * The track is immediately erased without setting it to Track_Finished first
-   */
-   bool track_too_old = (now-g->last_seen) > time_threshold;
+   bool track_too_old = g->not_seen_cnt > detection_hysteresis;
 
-
-   /// remove grasp if it was finished in the last update
+   // remove grasp if it was finished in the last update
    // http://stackoverflow.com/questions/263945/what-happens-if-you-call-erase-on-a-map-element-while-iterating-from-begin-to
    if (g->state == Track_Finished || (track_too_old && g->state == Track_Initialized)){
     tracks.erase(it++);
@@ -200,11 +207,6 @@ public:
 
   }
 
-  // append new grasps:
-  //  for (uint i=0; i<new_tracks.size(); ++i){
-  //   assert(new_tracks[i].state == Track_Initialized);
-  //   tracks[new_tracks[i].id] = new_tracks[i];
-  //  }
 
   for (uint i=0; i<detections.size(); ++i){
    if (detection_used[i])
@@ -216,15 +218,16 @@ public:
    tracks[new_track.id] = new_track;
   }
 
- }
+ } // update_tracks
 
- /// list of all active tracks
+
+
+ /// list of all  tracks
  std::map<int,T> tracks;
 
  Object_tracker(){
   max_dist_px = 30;
-  time_threshold = ros::Duration(0.2);
-  detections_before_confirmation = 5;
+  detection_hysteresis = 5;
  }
 
 };
