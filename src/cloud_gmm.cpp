@@ -15,7 +15,7 @@ cv::Mat PixelGaussian::getForeground(float max_dist, const cv::Mat& current){
  cv::Mat fg(mean.size(), CV_8UC1);
  fg.setTo(0);
 
- float m,c,v;
+ float m,c;//,v;
 
  assert(mean.size() == current.size());
 
@@ -29,7 +29,7 @@ cv::Mat PixelGaussian::getForeground(float max_dist, const cv::Mat& current){
 
    m = mean.at<float>(y,x);
    c = current.at<float>(y,x);
-   v = var.at<float>(y,x);
+   //v = var.at<float>(y,x);
 
    // no measurement at this position
    if (c != c) continue;

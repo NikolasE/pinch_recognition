@@ -13,11 +13,16 @@
 
 
 #define C_MIN_HAND_AREA 1000
-#define C_MIN_OBJECT_AREA 20
+#define C_MIN_OBJECT_AREA 100
 
 // Grasp_Confirmed and Grasp_Finished are intermediate states
 enum Tracking_State {Track_Initialized  = 0, Track_Confirmed, Track_Active, Track_Finished};
 
+struct Contour_info {
+ float area;
+ bool border_crossing;
+ cv::Point2f center;
+};
 
 
 struct Tracked_Object {
@@ -69,9 +74,13 @@ struct Grasp : public Tracked_Object {
 };
 
 
-
+void detectionHelper(cv::Mat& foreground, const cv::Mat& areaMask,Cloud& cloud, std::vector<std::vector<cv::Point> >& contours, std::vector<cv::Vec4i>& hierarchy, std::vector<Contour_info> & contour_infos);
 void detectGrasp(cv::Mat& foreground, std::vector<Grasp>& res, cv::Mat* col = NULL, bool verbose = false);
-void detectPlayingPieces(cv::Mat& foreground,const cv::Mat& areaMask, const Cloud& scene, std::vector<Playing_Piece>& objects, bool& hand_visible, bool &border_crossing,  cv::Mat* col);
+void detectPlayingPieces(cv::Mat& foreground,const cv::Mat& areaMask, const Cloud& scene, std::vector<Playing_Piece>& objects, bool &border_crossing,  cv::Mat* col);
+void detectPlayingPieces2(cv::Mat& foreground,const cv::Mat& areaMask, const Cloud& scene, std::vector<Playing_Piece>& objects, bool& large_component_visible, bool &border_crossing,  cv::Mat* col);
+
+
+void detectGraspAndObjects(cv::Mat& foreground, const cv::Mat& areaMask, const Cloud& cloud, bool & border_crossing, std::vector<Grasp>* grasps = NULL, std::vector<Playing_Piece>* objects = NULL, cv::Mat* col = NULL);
 
 
 typedef std::map<int,Grasp>::iterator Grasp_it;
