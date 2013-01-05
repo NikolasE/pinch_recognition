@@ -13,3 +13,5 @@ srv_gen/
 resources/images.qrc.depends
 *.*~
 lib/
+CMakeC*
+CMakeF*
