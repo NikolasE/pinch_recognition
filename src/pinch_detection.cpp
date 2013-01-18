@@ -187,7 +187,8 @@ void detectPlayingPieces2(cv::Mat& foreground, const cv::Mat& areaMask, const Cl
   if (area < C_MIN_OBJECT_AREA)
    continue;
 
-  Playing_Piece pp(contour_infos[i].center);
+  Playing_Piece pp; // (contour_infos[i].center);
+  pp.detection_center = contour_infos[i].center;
   pp.area = contour_infos[i].area;
   objects.push_back(pp);
  }
@@ -254,7 +255,8 @@ void detectPlayingPieces(cv::Mat& foreground, const cv::Mat& areaMask, const Clo
 
   cv::Point2f center = cv::Point2f(mom.m10/mom.m00, mom.m01/mom.m00);
 
-  Playing_Piece pp(center);
+  Playing_Piece pp;
+  pp.detection_center = center;
   pp.area = areas[i];
   objects.push_back(pp);
 
@@ -313,7 +315,8 @@ void detectGraspAndObjects(cv::Mat& foreground, const cv::Mat& areaMask, const C
 
   if (objects){
    // add new object detection if
-   Playing_Piece pp(contour_infos[i].center);
+   Playing_Piece pp;
+   pp.detection_center = contour_infos[i].center;
    pp.area = contour_infos[i].area;
    if (pp.area >= C_MIN_OBJECT_AREA){
     objects->push_back(pp);
@@ -353,6 +356,7 @@ void detectGraspAndObjects(cv::Mat& foreground, const cv::Mat& areaMask, const C
 
   // if a hole with sufficient size was found, create new Grasp detection
   if (largest_child > 0){
+
    grasps->push_back(Grasp(contour_infos[largest_child].center));
 
 
